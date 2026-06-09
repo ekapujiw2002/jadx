@@ -11,10 +11,9 @@ import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import static jadx.core.utils.files.FileUtils.close;
+import jadx.core.utils.exceptions.JadxRuntimeException;
 
 /**
  * Simple template engine
@@ -34,7 +33,7 @@ public class TemplateFile {
 
 	private final String templateName;
 	private final InputStream template;
-	private final Map<String, String> values = new HashMap<String, String>();
+	private final Map<String, String> values = new HashMap<>();
 
 	public static TemplateFile fromResources(String path) throws FileNotFoundException {
 		InputStream res = TemplateFile.class.getResourceAsStream(path);
@@ -44,31 +43,25 @@ public class TemplateFile {
 		return new TemplateFile(path, res);
 	}
 
-	private TemplateFile(String name, InputStream in) throws FileNotFoundException {
+	private TemplateFile(String name, InputStream in) {
 		this.templateName = name;
 		this.template = in;
 	}
 
-	public void add(String name, @NotNull Object value) {
-		values.put(name, value.toString());
+	public void add(String name, @Nullable Object value) {
+		values.put(name, String.valueOf(value));
 	}
 
 	public String build() throws IOException {
-		ByteArrayOutputStream out = new ByteArrayOutputStream();
-		try {
+		try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
 			process(out);
-		} finally {
-			close(out);
+			return out.toString();
 		}
-		return out.toString();
 	}
 
 	public void save(File outFile) throws IOException {
-		OutputStream out = new FileOutputStream(outFile);
-		try {
+		try (OutputStream out = new FileOutputStream(outFile)) {
 			process(out);
-		} finally {
-			close(out);
 		}
 	}
 
@@ -76,9 +69,7 @@ public class TemplateFile {
 		if (template.available() == 0) {
 			throw new IOException("Template already processed");
 		}
-		InputStream in = null;
-		try {
-			in = new BufferedInputStream(template);
+		try (InputStream in = new BufferedInputStream(template)) {
 			ParserState state = new ParserState();
 			while (true) {
 				int ch = in.read();
@@ -92,8 +83,6 @@ public class TemplateFile {
 					out.write(ch);
 				}
 			}
-		} finally {
-			close(in);
 		}
 	}
 
@@ -142,7 +131,7 @@ public class TemplateFile {
 						return "{" + ch;
 
 					case END:
-						throw new RuntimeException("Expected variable end: '" + parser.curVariable
+						throw new JadxRuntimeException("Expected variable end: '" + parser.curVariable
 								+ "' (missing second '}')");
 				}
 				break;
@@ -154,7 +143,7 @@ public class TemplateFile {
 	private String processVar(String varName) {
 		String str = values.get(varName);
 		if (str == null) {
-			throw new RuntimeException("Unknown variable: '" + varName
+			throw new JadxRuntimeException("Unknown variable: '" + varName
 					+ "' in template: " + templateName);
 		}
 		return str;
